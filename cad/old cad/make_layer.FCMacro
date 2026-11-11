@@ -1,0 +1,193 @@
+# make_layer.FCMacro  -  ELE408 Robot Art: one layer of the modular epicycle robot  (v3, 4 Nov 2026)
+#
+# Run in FreeCAD:  Macro -> Macros... -> select this file -> Execute
+# Creates a document "EpicycleLayer" with every part of ONE layer as a separate, named solid,
+# so in RobotCAD each part (or group of parts) can become a link.
+#
+# Layer, top to bottom:
+#   BarAbove      x-bar of the layer above (reference only, not part of this layer)
+#   ClampA        clamp on the bar above. Does NOT slide: fixed at the bar's end, thumb screw to lock
+#   Bearing608    608 bearing in ClampA's boss            -> TOP PIVOT (free for setup)
+#   PivotPin      8 mm pin from the boss, through the bearing, into the support rail hub
+#                 (an M3 grub screw in the boss locks it while drawing)
+#   SupportRail   rail with a hub for the pin, ball transfer units at each end
+#   BallUnitL/R
+#   EncoderBoard  magnetic encoder / closed-loop driver on the back of the stepper (position + direction)
+#   Stepper       NEMA 17 (pancake by default), shaft pointing DOWN
+#   MotorShaft    5 mm shaft stub
+#   ShaftFlange   5 mm flange coupler on the shaft (the stepper's "horn")   -> BOTTOM PIVOT (driven)
+#   DriveHub      spacer between the flange and ClampB
+#   ClampB        clamp on this layer's bar. The bar SLIDES through it: this sets the radius
+#   Bar           this layer's 2020 x-bar; the next layer's ClampA sits at its far end
+#
+# Radius of this layer's circle = distance from this layer's pivot axis to the next layer's
+# ClampA (bar far end - CLAMP_L/2). Set RADIUS below to place the bar for a given radius.
+#
+# Coordinates: mm. Origin = pivot axis, on the centre line of the bar above. x along the bars, z up.
+# Edit the numbers below and run again to regenerate.
+
+import FreeCAD as App
+import Part
+from FreeCAD import Vector as V
+
+P = dict(
+    BAR=20.0, BAR_LEN=200.0, CLEAR=0.4,          # 2020 extrusion, sliding clearance
+    CLAMP_L=30.0, CLAMP_W=40.0, WALL=6.0,        # clamp block around the bar
+    SCREW_D=4.2,                                 # M5 thumb screw tap hole
+    BOSS_D=30.0, BOSS_H=13.0,                    # bearing boss under ClampA
+    BRG_OD=22.0, BRG_ID=8.0, BRG_H=7.0,          # 608 bearing
+    PIN_D=8.0,
+    RAIL_LEN=160.0, RAIL_W=20.0, RAIL_T=6.0,     # support rail arms
+    RAIL_CENTRE=42.0, MOTOR_HOLE_PCD=31.0, MOTOR_HOLE_D=3.4,   # centre plate + NEMA 17 M3 holes (31 mm square)
+    PIVOT_LOCK_D=2.5,                            # M3 grub screw (tapped) in ClampA boss to lock the pin
+    HUB_D=16.0, HUB_H=3.0, GAP=2.0,
+    BALL_HOUSING_D=16.0, BALL_HOUSING_H=8.0, BALL_D=10.0,
+    BALL_INSET=8.0, BALL_DOWN=True,              # ball units point down (False = up)
+    ENC_W=42.0, ENC_H=10.0,                      # encoder / closed-loop board on the motor back
+    MOTOR_W=42.3, MOTOR_H=23.0,                  # NEMA 17 pancake (use 40-48 for a standard body)
+    MOTOR_BOSS_D=22.0, MOTOR_BOSS_H=2.0,         # locating boss on the motor face
+    SHAFT_D=5.0, SHAFT_L=20.0,
+    FLANGE_D=22.0, FLANGE_H=10.0,                # 5 mm flange coupler ("horn")
+    DRIVEHUB_D=22.0, DRIVEHUB_H=8.0,
+    RADIUS=70.0,                                 # radius this bar is set to in the model (mm)
+)
+
+RHO = dict(alu=2.70e-3, steel=7.85e-3, pla=0.62e-3)   # g/mm^3 (PLA at ~50 % infill)
+FIXED_MASS_G = dict(Stepper=130.0, EncoderBoard=15.0, Bearing608=12.0, BallUnitL=8.0,
+                    BallUnitR=8.0, ShaftFlange=10.0, Bar=0.5 * P["BAR_LEN"])  # 2020 ~0.5 g/mm
+
+
+def box(x0, x1, y0, y1, z0, z1):
+    return Part.makeBox(x1 - x0, y1 - y0, z1 - z0, V(x0, y0, z0))
+
+
+def cyl(d, z0, z1, x=0.0, y=0.0):
+    return Part.makeCylinder(d / 2, z1 - z0, V(x, y, z0), V(0, 0, 1))
+
+
+def clamp(zc):
+    """Clamp block around a bar whose centre line is at height zc; tunnel along x; thumb screw on top."""
+    b, w, c = P["BAR"], P["WALL"], P["CLEAR"]
+    h = b / 2 + w
+    blk = box(-P["CLAMP_L"] / 2, P["CLAMP_L"] / 2, -P["CLAMP_W"] / 2, P["CLAMP_W"] / 2, zc - h, zc + h)
+    tunnel = box(-P["CLAMP_L"], P["CLAMP_L"], -(b + c) / 2, (b + c) / 2, zc - (b + c) / 2, zc + (b + c) / 2)
+    screw = Part.makeCylinder(P["SCREW_D"] / 2, h + 1, V(0, P["CLAMP_W"] / 2 + 1, zc), V(0, -1, 0))  # side screw
+    return blk.cut(tunnel).cut(screw), zc - h, zc + h
+
+
+def build():
+    doc = App.newDocument("EpicycleLayer")
+    b = P["BAR"]
+    parts = {}
+
+    # bar above (reference): ends 15 mm past this layer's pivot, as it would on the real chain
+    parts["BarAbove"] = (box(P["CLAMP_L"] / 2 - P["BAR_LEN"], P["CLAMP_L"] / 2, -b / 2, b / 2, -b / 2, b / 2),
+                         "alu", (0.75, 0.77, 0.80), 0.6)
+
+    # ClampA + bearing boss
+    cA, zA_bot, _ = clamp(0.0)
+    z_boss_bot = zA_bot - P["BOSS_H"]
+    cA = cA.fuse(cyl(P["BOSS_D"], z_boss_bot, zA_bot))
+    cA = cA.cut(cyl(P["BRG_OD"], z_boss_bot - 1, z_boss_bot + P["BRG_H"]))
+    cA = cA.cut(cyl(P["PIN_D"] + 0.4, z_boss_bot - 1, zA_bot + 0.1))
+    # radial grub-screw hole into the boss: tighten to lock the top pivot while drawing
+    zl = z_boss_bot + P["BRG_H"] + (P["BOSS_H"] - P["BRG_H"]) / 2
+    cA = cA.cut(Part.makeCylinder(P["PIVOT_LOCK_D"] / 2, P["BOSS_D"], V(0, 0, zl), V(1, 0, 0)))
+    cA = cA.removeSplitter()
+    parts["ClampA"] = (cA, "pla", (0.88, 0.54, 0.12), 0)
+
+    brg = cyl(P["BRG_OD"], z_boss_bot, z_boss_bot + P["BRG_H"]).cut(
+        cyl(P["BRG_ID"], z_boss_bot - 1, z_boss_bot + P["BRG_H"] + 1))
+    parts["Bearing608"] = (brg, "steel", (0.6, 0.6, 0.65), 0)
+
+    # support rail + hub
+    z_hub_top = z_boss_bot - P["GAP"]
+    z_rail_top = z_hub_top - P["HUB_H"]
+    z_rail_bot = z_rail_top - P["RAIL_T"]
+    rail = box(-P["RAIL_LEN"] / 2, P["RAIL_LEN"] / 2, -P["RAIL_W"] / 2, P["RAIL_W"] / 2, z_rail_bot, z_rail_top)
+    c = P["RAIL_CENTRE"] / 2
+    rail = rail.fuse(box(-c, c, -c, c, z_rail_bot, z_rail_top))
+    for hx in (-1, 1):
+        for hy in (-1, 1):
+            rail = rail.cut(cyl(P["MOTOR_HOLE_D"], z_rail_bot - 1, z_rail_top + 1,
+                                x=hx * P["MOTOR_HOLE_PCD"] / 2, y=hy * P["MOTOR_HOLE_PCD"] / 2))
+    rail = rail.fuse(cyl(P["HUB_D"], z_rail_top, z_hub_top))
+    rail = rail.cut(cyl(P["PIN_D"] + 0.2, z_rail_bot + 1.5, z_hub_top + 1)).removeSplitter()
+    parts["SupportRail"] = (rail, "alu", (0.45, 0.5, 0.58), 0)
+    # pin runs up through the bearing into the boss so the grub screw can lock it
+    parts["PivotPin"] = (cyl(P["PIN_D"], z_rail_bot + 1.5, zA_bot - 0.2), "steel", (0.7, 0.7, 0.72), 0)
+
+    xb = P["RAIL_LEN"] / 2 - P["BALL_INSET"]
+    for name, sx in (("BallUnitL", -1), ("BallUnitR", 1)):
+        if P["BALL_DOWN"]:
+            z0, z1, zc = z_rail_bot - P["BALL_HOUSING_H"], z_rail_bot, z_rail_bot - P["BALL_HOUSING_H"]
+        else:
+            z0, z1, zc = z_rail_top, z_rail_top + P["BALL_HOUSING_H"], z_rail_top + P["BALL_HOUSING_H"]
+        unit = cyl(P["BALL_HOUSING_D"], z0, z1, x=sx * xb).fuse(Part.makeSphere(P["BALL_D"] / 2, V(sx * xb, 0, zc)))
+        parts[name] = (unit.removeSplitter(), "steel", (0.35, 0.35, 0.4), 0)
+
+    # encoder board + stepper (shaft on the pivot axis, pointing down)
+    z_enc_bot = z_rail_bot - P["ENC_H"]
+    w = P["ENC_W"] / 2
+    parts["EncoderBoard"] = (box(-w, w, -w, w, z_enc_bot, z_rail_bot), None, (0.1, 0.45, 0.25), 0)
+    z_motor_bot = z_enc_bot - P["MOTOR_H"]
+    m = P["MOTOR_W"] / 2
+    stepper = box(-m, m, -m, m, z_motor_bot, z_enc_bot)
+    stepper = stepper.fuse(cyl(P["MOTOR_BOSS_D"], z_motor_bot - P["MOTOR_BOSS_H"], z_motor_bot)).removeSplitter()
+    parts["Stepper"] = (stepper, None, (0.13, 0.13, 0.15), 0)
+
+    # shaft, flange coupler (bottom pivot), drive hub
+    z_flange_top = z_motor_bot - P["MOTOR_BOSS_H"]          # flange sits below the boss
+    z_flange_bot = z_flange_top - P["FLANGE_H"]
+    parts["MotorShaft"] = (cyl(P["SHAFT_D"], z_motor_bot - P["SHAFT_L"], z_motor_bot - P["MOTOR_BOSS_H"]), "steel", (0.7, 0.7, 0.72), 0)
+    flange = cyl(P["FLANGE_D"], z_flange_bot, z_flange_top).cut(cyl(P["SHAFT_D"], z_flange_bot - 1, z_flange_top + 1))
+    parts["ShaftFlange"] = (flange, "alu", (0.8, 0.8, 0.85), 0)
+    z_dh_bot = z_flange_bot - P["DRIVEHUB_H"]
+    parts["DriveHub"] = (cyl(P["DRIVEHUB_D"], z_dh_bot, z_flange_bot).cut(cyl(6.0, z_dh_bot - 1, z_flange_bot + 1)), "pla", (0.88, 0.54, 0.12), 0)  # shaft clearance
+
+    # ClampB + bar, placed so the next layer's ClampA is RADIUS from this pivot
+    zc_bar = z_dh_bot - (b / 2 + P["WALL"])
+    cB, _, _ = clamp(zc_bar)
+    parts["ClampB"] = (cB, "pla", (0.88, 0.54, 0.12), 0)
+    x_end = P["RADIUS"] + P["CLAMP_L"] / 2
+    parts["Bar"] = (box(x_end - P["BAR_LEN"], x_end, -b / 2, b / 2, zc_bar - b / 2, zc_bar + b / 2),
+                    "alu", (0.75, 0.77, 0.80), 0)
+
+    layer = doc.addObject("App::Part", "Layer")
+    report = []
+    for name, (shape, mat, colour, transp) in parts.items():
+        if not shape.isValid():
+            raise RuntimeError(name + " shape is not valid")
+        obj = doc.addObject("Part::Feature", name)
+        obj.Shape = shape
+        layer.addObject(obj)
+        if App.GuiUp:
+            obj.ViewObject.ShapeColor = colour
+            obj.ViewObject.Transparency = int(transp * 100)
+        g = FIXED_MASS_G.get(name, shape.Volume * RHO[mat] if mat else 0.0)
+        report.append((name, mat or "bought", g))
+    doc.recompute()
+
+    r_min = P["CLAMP_L"]                                   # clamps touching
+    r_max = P["BAR_LEN"] - P["CLAMP_L"] / 2 - P["CLAMP_L"] / 2
+    App.Console.PrintMessage("\nEpicycleLayer v3 built.\n")
+    App.Console.PrintMessage("Top pivot (bearing centre) z = %.1f mm, bottom pivot (motor face) z = %.1f mm\n"
+                             % (z_boss_bot + P["BRG_H"] / 2, z_motor_bot))
+    App.Console.PrintMessage("Drop per layer (bar centre to bar centre): %.1f mm\n" % (-zc_bar))
+    App.Console.PrintMessage("Radius range by sliding the bar through ClampB: %.0f to %.0f mm\n" % (r_min, r_max))
+    App.Console.PrintMessage("%-13s %-7s %8s\n" % ("part", "mat", "mass g"))
+    total = 0.0
+    for name, mat, g in report:
+        if name == "BarAbove":
+            continue
+        total += g
+        App.Console.PrintMessage("%-13s %-7s %8.1f\n" % (name, mat, g))
+    App.Console.PrintMessage("%-13s %-7s %8.1f   (layer total)\n" % ("TOTAL", "", total))
+    if App.GuiUp:
+        import FreeCADGui as Gui
+        Gui.activeDocument().activeView().viewIsometric()
+        Gui.SendMsgToActiveView("ViewFit")
+    return doc
+
+
+build()
