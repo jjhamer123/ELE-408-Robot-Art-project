@@ -1,0 +1,3 @@
+[submodule "godot/RobotART_Project"]
+	path = godot/RobotART_Project
+	url = https://github.com/jjhamer123/GODOT-ROTBOTART-Sim.git
