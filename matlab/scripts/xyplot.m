@@ -1,16 +1,21 @@
-function d = penXY(which, varargin)
-%PENXY  Load (and plot) a pen x,y CSV written by the Godot sim's PenXYLogger.
+function d = xyplot(which, varargin)
+%XYPLOT  Load (and plot) a pen x,y CSV written by the Godot sim's PenXYLogger.
 %
-%   penXY            plot the most recent run
-%   penXY(1)         same: 1 = last run, 2 = the one before, 3 = ...
-%   penXY("pen_xy_2026-11-16T15-13-30")       by name, with or without .csv
-%   penXY("pen_xy_2026_11_16T15_13_30")       MATLAB's import-style name works too
-%   penXY("/full/path/to/some_file.csv")      any file on disk
-%   penXY("list")    list the runs, newest first, with their numbers
+%   xyplot           plot the most recent run
+%   xyplot(1)         same: 1 = last run, 2 = the one before, 3 = ...
+%   xyplot("pen_xy_2026-11-16T15-13-30")       by name, with or without .csv
+%   xyplot("pen_xy_2026_11_16T15_13_30")       MATLAB's import-style name works too
+%   xyplot("/full/path/to/some_file.csv")      any file on disk
+%   xyplot("list")    list the runs, newest first, with their numbers
 %
-%   d = penXY(...)   also returns a struct:
+%   d = xyplot(...)   also returns a struct:
 %       d.t  time (s)     d.x, d.y  pen position (m, ROS axes, robot base)
+%       d.penDemand  pen asked to be down (/pen_down_demand), logical
+%       d.penDown    pen actually down (/pen_down_pos), logical
+%                    (both all true for CSVs from before the pen columns existed)
 %       d.file  full path of the CSV that was read
+%
+%   The plot draws pen-down moves solid and pen-up moves as a light dashed line.
 %
 %   Options (name, value):
 %       "Folder"  where the CSVs are. Default: BOTH the logs folder of every
@@ -19,9 +24,9 @@ function d = penXY(which, varargin)
 %       "Plot"    true/false (default: true when called without an output)
 %
 %   Examples:
-%       penXY(2)                          % plot the second to last run
-%       d = penXY(1);  plot(d.t, d.x)     % x against time
-%       penXY(1, "Folder", "~/Desktop/runs")
+%       xyplot(2)                          % plot the second to last run
+%       d = xyplot(1);  plot(d.t, d.x)     % x against time
+%       xyplot(1, "Folder", "~/Desktop/runs")
 
 if nargin < 1 || isempty(which)
     which = 1;
@@ -58,10 +63,10 @@ if isnumeric(which)
     n = round(double(which));
     runs = listRuns(folders);
     if isempty(runs)
-        error("penXY:none", "No pen_xy_*.csv files in:\n    %s\nRun the sim with the PenXYLogger node, or pass ""Folder"".", where);
+        error("xyplot:none", "No pen_xy_*.csv files in:\n    %s\nRun the sim with the PenXYLogger node, or pass ""Folder"".", where);
     end
     if n < 1 || n > numel(runs)
-        error("penXY:range", "Asked for run %d but there are only %d runs (see penXY(""list"")).", n, numel(runs));
+        error("xyplot:range", "Asked for run %d but there are only %d runs (see xyplot(""list"")).", n, numel(runs));
     end
     file = fullfile(runs(n).folder, runs(n).name);
 else
@@ -71,21 +76,21 @@ end
 % ---- read it ----------------------------------------------------------
 fid = fopen(file, "r");
 if fid < 0
-    error("penXY:open", "Can't open %s", file);
+    error("xyplot:open", "Can't open %s", file);
 end
 header = fgetl(fid);
 fclose(fid);
 cols = strtrim(strsplit(header, ","));
 M = dlmread(file, ",", 1, 0);           % skip the header row
 if isempty(M)
-    error("penXY:empty", "%s has no rows yet.", file);
+    error("xyplot:empty", "%s has no rows yet.", file);
 end
 
 ti = find(strcmp(cols, "t_s"), 1);
 xi = find(startsWith(cols, "x_"), 1);
 yi = find(startsWith(cols, "y_"), 1);
 if isempty(ti) || isempty(xi) || isempty(yi)
-    error("penXY:format", "%s doesn't have t_s, x_..., y_... columns (header: %s)", file, header);
+    error("xyplot:format", "%s doesn't have t_s, x_..., y_... columns (header: %s)", file, header);
 end
 scale = 1;
 if strcmp(cols{xi}, "x_mm"), scale = 1e-3; end    % logger was set to millimetres
@@ -93,21 +98,29 @@ if strcmp(cols{xi}, "x_mm"), scale = 1e-3; end    % logger was set to millimetre
 d.t = M(:, ti);
 d.x = M(:, xi) * scale;
 d.y = M(:, yi) * scale;
+d.penDemand = penColumn(cols, M, "pen_down_demand");
+d.penDown = penColumn(cols, M, "pen_down_pos");
 d.file = file;
 
 % ---- plot -------------------------------------------------------------
 if p.Results.Plot
     [~, nm, ext] = fileparts(file);
     figure("Name", [nm ext]);
-    plot(d.x * 1000, d.y * 1000, "LineWidth", 1);
+    down = d.penDown;
+    % pen up: show the moves, including the points where it lifts and lands
+    up = ~down | [~down(2:end); false] | [false; ~down(1:end-1)];
+    xd = d.x;  yd = d.y;  xd(~down) = NaN;  yd(~down) = NaN;
+    xu = d.x;  yu = d.y;  xu(~up) = NaN;    yu(~up) = NaN;
+    plot(xd * 1000, yd * 1000, "LineWidth", 1.2, "Color", [0 0.25 0.7]);
     hold on
+    plot(xu * 1000, yu * 1000, "--", "LineWidth", 0.8, "Color", [0.7 0.7 0.7]);
     plot(d.x(1) * 1000, d.y(1) * 1000, "go", "MarkerFaceColor", "g");     % start
     plot(d.x(end) * 1000, d.y(end) * 1000, "rs", "MarkerFaceColor", "r"); % end
     hold off
     axis equal; grid on
     xlabel("x (mm)"); ylabel("y (mm)");
     title(sprintf("%s   (%.1f s, %d points)", strrep(nm, '_', '\_'), d.t(end) - d.t(1), numel(d.t)));
-    legend("pen path", "start", "end", "Location", "bestoutside");
+    legend("pen down", "pen up", "start", "end", "Location", "bestoutside");
 end
 if nargout == 0
     clear d
@@ -116,6 +129,17 @@ end
 
 
 % ======================================================================
+
+function v = penColumn(cols, M, name)
+% a 0/1 pen column as logical; all true if the CSV doesn't have it
+i = find(strcmp(cols, name), 1);
+if isempty(i) || size(M, 2) < i
+    v = true(size(M, 1), 1);
+else
+    v = M(:, i) ~= 0;
+end
+end
+
 
 function runs = listRuns(folders)
 % pen_xy_*.csv in all the folders, newest first. Sorted by the date and time in
@@ -162,7 +186,7 @@ for f = 1:numel(folders)
         end
     end
 end
-error("penXY:notfound", "Can't find %s in:\n    %s\nTry penXY(""list"") to see the runs.", name, strjoin(folders, sprintf("\n    ")));
+error("xyplot:notfound", "Can't find %s in:\n    %s\nTry xyplot(""list"") to see the runs.", name, strjoin(folders, sprintf("\n    ")));
 end
 
 
