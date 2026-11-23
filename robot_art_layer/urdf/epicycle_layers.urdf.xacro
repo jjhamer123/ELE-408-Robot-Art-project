@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  ELE408 Robot Art - modular epicycle robot, 3 layers + pen (v3, Nov 2026)
+  ELE408 Robot Art - modular epicycle robot, N layers + pen (v3, Nov 2026)
   Generated from the CAD meshes. Units: m, kg, rad.
 
   Every layer's 500 mm support bar points the SAME way (world X) and never turns:
@@ -26,17 +26,26 @@
   pivot2..3 are mimic joints (robot_state_publisher fills them in).
 
   Radius = rest_radius + clampB value (rest_radius is 0 for ROS, 0.07 for the Godot files).
-  Build:   xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf
+  Build:   xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf              (3 layers)
+           xacro epicycle_layers.urdf.xacro layers:=5 > epicycle_5_layers.urdf  (any number, 1 or more)
+           xacro epicycle_layers.urdf.xacro track_length:=0.6 ...              (guide rail length, m)
 -->
 <robot name="epicycle_layers" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="layers" default="3"/>         <!-- how many layers hang below the fixed gantry bar -->
+  <xacro:arg name="track_length" default="0.5"/> <!-- m, every layer's guide rails except the top one -->
   <xacro:arg name="rest_radius" default="0.0"/>  <!-- Godot: 0.07 so the URDF zero pose is a real radius -->
   <xacro:arg name="mesh_path" default="package://robot_art_layer/meshes/"/>
   <xacro:property name="M" value="$(arg mesh_path)"/>
   <xacro:property name="R0" value="$(arg rest_radius)"/>
+  <xacro:arg name="slide_friction" default="0.5"/>     <!-- N, support bar through the carriage -->
+  <xacro:arg name="bearing_friction" default="0.002"/> <!-- N m, each top bearing -->
+  <xacro:property name="slide_fric" value="$(arg slide_friction)"/>
+  <xacro:property name="bearing_fric" value="$(arg bearing_friction)"/>
   <xacro:include filename="robot_art_parts.xacro"/>
   <xacro:property name="layer_drop" value="0.1363"/>
   <xacro:property name="pen_drop" value="0.140"/>     <!-- bar centre line -> pen tip -->
-  <xacro:property name="top_z" value="${3*layer_drop + pen_drop}"/>  <!-- gantry bar height: pen tip lands on z = 0 -->
+  <xacro:property name="N" value="${int($(arg layers))}"/>
+  <xacro:property name="top_z" value="${N*layer_drop + pen_drop}"/>  <!-- gantry bar height: pen tip lands on z = 0 -->
 
   <xacro:macro name="layer" params="i parent">
     <joint name="clampA${i}" type="fixed">
@@ -53,12 +62,13 @@
       <!-- the bar above lies 90 deg round from the motor's support-bar direction, hence the -90 deg yaw -->
       <joint name="pivot${i}" type="continuous">
         <parent link="clampA${i}"/><child link="motor${i}"/><origin xyz="0 0 ${pivot_z}" rpy="0 0 ${-pi/2}"/>
-        <axis xyz="0 0 1"/><limit effort="0" velocity="10"/><dynamics friction="0.002" damping="0.0"/>
+        <axis xyz="0 0 1"/><limit effort="0" velocity="10"/><dynamics friction="${bearing_fric}" damping="0.0"/>
         <mimic joint="joint${i-1}" multiplier="-1" offset="0"/>
       </joint>
     </xacro:unless>
     <xacro:motor_link name="motor${i}"/>
-    <xacro:support_link name="support${i}" parent="motor${i}"/>
+    <!-- zero pose: motor i is (i-1)*R0 along +X, so its bar starts that far back = centred on the rails -->
+    <xacro:support_link name="support${i}" parent="motor${i}" back="${0.0 - (i-1)*R0}"/>
     <joint name="encoder${i}_mount" type="fixed">
       <parent link="motor${i}"/><child link="encoder${i}"/><origin xyz="0 0 -0.0479"/>
     </joint>
@@ -84,27 +94,31 @@
     </joint>
     <xacro:bar_link name="bar${i}"/>
 
-    <!-- tracks: long enough for the motor axis to reach (i-1) * r_max either side, plus the ball unit -->
+    <!-- tracks: layer 1's motor never moves, so a 30 mm stub; every other layer uses track_length -->
     <xacro:property name="tz" value="${top_z - (i-1)*layer_drop + pivot_z + track_floor}"/>
-    <xacro:property name="tl" value="${2*(i-1)*r_max + 0.03}"/>
+    <xacro:property name="tl" value="${0.03 if i == 1 else float($(arg track_length))}"/>
     <xacro:track name="track${i}_L" x="${-track_x}" y="0" z="${tz}" length="${tl}"/>
     <xacro:track name="track${i}_R" x="${track_x}"  y="0" z="${tz}" length="${tl}"/>
   </xacro:macro>
 
-  <!-- ===== 3 layers hanging from a fixed gantry bar ===== -->
+  <!-- layer i, then layer i+1 hanging from its bar, ... up to layer n -->
+  <xacro:macro name="layers_from" params="i n">
+    <xacro:layer i="${i}" parent="bar${i-1}"/>
+    <xacro:if value="${i &lt; n}"><xacro:layers_from i="${i+1}" n="${n}"/></xacro:if>
+  </xacro:macro>
+
+  <!-- ===== N layers hanging from a fixed gantry bar ===== -->
   <link name="world"/>
   <joint name="gantry_fixed" type="fixed">
     <parent link="world"/><child link="bar0"/>
     <origin xyz="0 0 ${top_z}"/>
   </joint>
   <xacro:bar_link name="bar0"/>
-  <xacro:layer i="1" parent="bar0"/>
-  <xacro:layer i="2" parent="bar1"/>
-  <xacro:layer i="3" parent="bar2"/>
+  <xacro:layers_from i="1" n="${N}"/>
 
-  <!-- pen at the end of the last bar (where a 4th layer's clamp A would go) -->
+  <!-- pen at the end of the last bar (where the next layer's clamp A would go) -->
   <joint name="pen_mount" type="fixed">
-    <parent link="bar3"/><child link="pen"/><origin xyz="0 0 -0.010"/>
+    <parent link="bar${N}"/><child link="pen"/><origin xyz="0 0 -0.010"/>
   </joint>
   <link name="pen">
     <visual><origin xyz="0 0 -0.015"/><geometry><box size="0.03 0.03 0.03"/></geometry><material name="orange"/></visual>

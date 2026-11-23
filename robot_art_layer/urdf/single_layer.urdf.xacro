@@ -19,6 +19,10 @@
   <xacro:arg name="mesh_path" default="package://robot_art_layer/meshes/"/>
   <xacro:property name="M" value="$(arg mesh_path)"/>
   <xacro:property name="R0" value="$(arg rest_radius)"/>
+  <xacro:arg name="slide_friction" default="0.5"/>     <!-- N, support bar through the carriage -->
+  <xacro:arg name="bearing_friction" default="0.002"/> <!-- N m, each top bearing -->
+  <xacro:property name="slide_fric" value="$(arg slide_friction)"/>
+  <xacro:property name="bearing_fric" value="$(arg bearing_friction)"/>
   <xacro:include filename="robot_art_parts.xacro"/>
   <!-- same place as in the STEP file: pivot axis at x 499.35, y 26.33 mm; bar centre line at z 81.36 mm -->
   <xacro:property name="ax" value="0.49935"/>
@@ -39,7 +43,7 @@
   <!-- TOP PIVOT: 608 bearing, 23.7 mm below the bar centre line (passive) -->
   <joint name="pivot" type="continuous">
     <parent link="clampA"/><child link="motor"/><origin xyz="0 0 ${pivot_z}"/>
-    <axis xyz="0 0 1"/><limit effort="0" velocity="10"/><dynamics friction="0.002" damping="0.0"/>
+    <axis xyz="0 0 1"/><limit effort="0" velocity="10"/><dynamics friction="${bearing_fric}" damping="0.0"/>
   </joint>
   <xacro:motor_link name="motor"/>
   <xacro:support_link name="support" parent="motor"/>

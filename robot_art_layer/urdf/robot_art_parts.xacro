@@ -52,11 +52,12 @@
   </xacro:macro>
 
   <!-- 500 mm 2020 support bar + 2 ball units. Never turns; slides through the carriage (passive). -->
-  <xacro:macro name="support_link" params="name parent">
+  <!-- back: where the bar starts relative to the carriage in the zero pose (so it starts on its rails) -->
+  <xacro:macro name="support_link" params="name parent back:=0">
     <joint name="${name}" type="prismatic">
-      <parent link="${parent}"/><child link="${name}_bar"/><origin xyz="0 0 0"/><axis xyz="1 0 0"/>
-      <!-- value = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
-      <limit lower="${-slide_max}" upper="${slide_max}" effort="0" velocity="1.0"/><dynamics friction="0.5" damping="0.0"/>
+      <parent link="${parent}"/><child link="${name}_bar"/><origin xyz="${back} 0 0"/><axis xyz="1 0 0"/>
+      <!-- value + back = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
+      <limit lower="${-slide_max - back}" upper="${slide_max - back}" effort="0" velocity="1.0"/><dynamics friction="${slide_fric}" damping="0.0"/>
     </joint>
     <link name="${name}_bar">
       <visual><geometry><mesh filename="${M}support.stl" scale="${S}"/></geometry><material name="steel"/></visual>

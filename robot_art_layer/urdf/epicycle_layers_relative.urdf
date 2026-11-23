@@ -4,7 +4,7 @@
 <!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
 <!-- =================================================================================== -->
 <!--
-  ELE408 Robot Art - modular epicycle robot, 3 layers + pen (v3, Nov 2026)
+  ELE408 Robot Art - modular epicycle robot, N layers + pen (v3, Nov 2026)
   Generated from the CAD meshes. Units: m, kg, rad.
 
   Every layer's 500 mm support bar points the SAME way (world X) and never turns:
@@ -30,7 +30,9 @@
   pivot2..3 are mimic joints (robot_state_publisher fills them in).
 
   Radius = rest_radius + clampB value (rest_radius is 0 for ROS, 0.07 for the Godot files).
-  Build:   xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf
+  Build:   xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf              (3 layers)
+           xacro epicycle_layers.urdf.xacro layers:=5 > epicycle_5_layers.urdf  (any number, 1 or more)
+           xacro epicycle_layers.urdf.xacro track_length:=0.6 ...              (guide rail length, m)
 -->
 <robot name="epicycle_layers">
   <!-- carriage (40 mm) can run until it meets a ball unit -->
@@ -50,7 +52,7 @@
     <color rgba="0.55 0.57 0.60 1"/>
   </material>
   <!-- gantry bar height: pen tip lands on z = 0 -->
-  <!-- ===== 3 layers hanging from a fixed gantry bar ===== -->
+  <!-- ===== N layers hanging from a fixed gantry bar ===== -->
   <link name="world"/>
   <joint name="gantry_fixed" type="fixed">
     <parent link="world"/>
@@ -138,9 +140,9 @@
   <joint name="support1" type="prismatic">
     <parent link="motor1"/>
     <child link="support1_bar"/>
-    <origin xyz="0 0 0"/>
+    <origin xyz="0.0 0 0"/>
     <axis xyz="1 0 0"/>
-    <!-- value = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
+    <!-- value + back = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
     <limit effort="0" lower="-0.214" upper="0.214" velocity="1.0"/>
     <dynamics damping="0.0" friction="0.5"/>
   </joint>
@@ -370,9 +372,9 @@
   <joint name="support2" type="prismatic">
     <parent link="motor2"/>
     <child link="support2_bar"/>
-    <origin xyz="0 0 0"/>
+    <origin xyz="0.0 0 0"/>
     <axis xyz="1 0 0"/>
-    <!-- value = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
+    <!-- value + back = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
     <limit effort="0" lower="-0.214" upper="0.214" velocity="1.0"/>
     <dynamics damping="0.0" friction="0.5"/>
   </joint>
@@ -488,21 +490,21 @@
     <visual>
       <origin xyz="0 0 -0.00075"/>
       <geometry>
-        <box size="0.020 0.37 0.0015"/>
+        <box size="0.020 0.5 0.0015"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="-0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.37 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.37 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
@@ -516,21 +518,21 @@
     <visual>
       <origin xyz="0 0 -0.00075"/>
       <geometry>
-        <box size="0.020 0.37 0.0015"/>
+        <box size="0.020 0.5 0.0015"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="-0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.37 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.37 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
@@ -602,9 +604,9 @@
   <joint name="support3" type="prismatic">
     <parent link="motor3"/>
     <child link="support3_bar"/>
-    <origin xyz="0 0 0"/>
+    <origin xyz="0.0 0 0"/>
     <axis xyz="1 0 0"/>
-    <!-- value = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
+    <!-- value + back = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
     <limit effort="0" lower="-0.214" upper="0.214" velocity="1.0"/>
     <dynamics damping="0.0" friction="0.5"/>
   </joint>
@@ -720,21 +722,21 @@
     <visual>
       <origin xyz="0 0 -0.00075"/>
       <geometry>
-        <box size="0.020 0.7100000000000001 0.0015"/>
+        <box size="0.020 0.5 0.0015"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="-0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.7100000000000001 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.7100000000000001 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
@@ -748,26 +750,26 @@
     <visual>
       <origin xyz="0 0 -0.00075"/>
       <geometry>
-        <box size="0.020 0.7100000000000001 0.0015"/>
+        <box size="0.020 0.5 0.0015"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="-0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.7100000000000001 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
     <visual>
       <origin xyz="0.00925 0 0.0035"/>
       <geometry>
-        <box size="0.0015 0.7100000000000001 0.010"/>
+        <box size="0.0015 0.5 0.010"/>
       </geometry>
       <material name="alu"/>
     </visual>
   </link>
-  <!-- pen at the end of the last bar (where a 4th layer's clamp A would go) -->
+  <!-- pen at the end of the last bar (where the next layer's clamp A would go) -->
   <joint name="pen_mount" type="fixed">
     <parent link="bar3"/>
     <child link="pen"/>

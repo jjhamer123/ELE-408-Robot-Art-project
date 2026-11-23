@@ -128,7 +128,7 @@
     <child link="support_bar"/>
     <origin xyz="0 0 0"/>
     <axis xyz="1 0 0"/>
-    <!-- value = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
+    <!-- value + back = support bar centre minus carriage centre, along the bar. Passive (effort 0). -->
     <limit effort="0" lower="-0.214" upper="0.214" velocity="1.0"/>
     <dynamics damping="0.0" friction="0.5"/>
   </joint>

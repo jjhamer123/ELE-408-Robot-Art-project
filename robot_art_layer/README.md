@@ -17,7 +17,7 @@ runs in a U-channel track fixed to the frame (the tracks run along world Y). The
 | `print/` | the 3 printed parts as STEP + STL, laid flat, centred | slicing and printing |
 | `urdf/` | robot description (3 layers + pen + tracks, and a single layer) | Godot / RViz / ROS 2 |
 | `meshes/` | one mesh per link (mm, scaled in the URDF) | used by the URDF |
-| `matlab/robotart_joint_states.m` | joint values to publish, including the passive slides | MATLAB → ROS 2 |
+| `matlab/robotart_joint_states.m` | joint values to publish (any number of layers), including the passive slides | MATLAB → ROS 2 |
 
 ## Printed parts
 | File | Size (mm) | Print orientation |
@@ -35,7 +35,8 @@ Inserts: M3 heat-set (4.0 mm) in the drive hub, M5 heat-set (6.4 mm) for the cla
 
 ## Bought parts per layer (new in v3)
 * 2 × **aluminium U-channel 20 × 10 × 1.5 mm** (17 mm inside) as tracks, cut to length:
-  layer 1: ~30 mm (its motor never moves), layer 2: ~370 mm, layer 3: ~710 mm (2 × reach + 30 mm).
+  layer 1: ~30 mm stub (its motor never moves); every other layer: the same length, 500 mm by default
+  (`track_length:=`). A motor can roll ±(length/2 − 8 mm) along its rails: ±242 mm for 500 mm rails.
   They sit 484 mm apart (centre to centre), with the floor 47.7 mm below the top pivot.
 * The ball units at the bar ends ride on the channel floor. The channel walls stop the bar sliding
   along its own length and turning. Ball unit body Ø16 in a 17 mm channel.
@@ -60,7 +61,9 @@ Layer height is 136.3 mm. The pen is fixed at the end of `bar3`, with its tip on
 ## Build the URDF
 ```bash
 cd urdf
-xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf                                  # package:// mesh paths (ROS 2)
+xacro epicycle_layers.urdf.xacro > epicycle_layers.urdf                                  # 3 layers, package:// mesh paths (ROS 2)
+xacro epicycle_layers.urdf.xacro layers:=5 > epicycle_5_layers.urdf                      # any number of layers
+xacro epicycle_layers.urdf.xacro layers:=5 track_length:=0.6 > epicycle_5_layers.urdf    # guide rail length (m)
 xacro epicycle_layers.urdf.xacro mesh_path:=../meshes/ > epicycle_layers_relative.urdf  # relative paths
 xacro single_layer.urdf.xacro > single_layer.urdf
 ```
